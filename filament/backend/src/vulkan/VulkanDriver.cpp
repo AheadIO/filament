@@ -877,7 +877,7 @@ void VulkanDriver::beginRenderPass(Handle<HwRenderTarget> rth, const RenderPassP
     const VkExtent2D extent = rt->getExtent();
     assert(extent.width > 0 && extent.height > 0);
 
-    const VulkanAttachment color = rt->getColor();
+    const VulkanAttachment color = rt->getColor(0); // TODO support MRT in beginRenderPass
     const VulkanAttachment depth = rt->getDepth();
     const bool hasColor = color.format != VK_FORMAT_UNDEFINED;
     const bool hasDepth = depth.format != VK_FORMAT_UNDEFINED;
@@ -1151,16 +1151,18 @@ void VulkanDriver::blit(TargetBufferFlags buffers,
     auto dstTarget = handle_cast<VulkanRenderTarget>(mHandleMap, dst);
     auto srcTarget = handle_cast<VulkanRenderTarget>(mHandleMap, src);
 
+    const int targetIndex = 0; // TODO: support MRT in blit
+
     // In debug builds, verify that the two render targets have blittable formats.
 #ifndef NDEBUG
     const VkPhysicalDevice gpu = mContext.physicalDevice;
     VkFormatProperties info;
-    vkGetPhysicalDeviceFormatProperties(gpu, srcTarget->getColor().format, &info);
+    vkGetPhysicalDeviceFormatProperties(gpu, srcTarget->getColor(targetIndex).format, &info);
     if (!ASSERT_POSTCONDITION_NON_FATAL(info.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT,
             "Source format is not blittable")) {
         return;
     }
-    vkGetPhysicalDeviceFormatProperties(gpu, dstTarget->getColor().format, &info);
+    vkGetPhysicalDeviceFormatProperties(gpu, dstTarget->getColor(targetIndex).format, &info);
     if (!ASSERT_POSTCONDITION_NON_FATAL(info.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT,
             "Destination format is not blittable")) {
         return;
@@ -1172,11 +1174,11 @@ void VulkanDriver::blit(TargetBufferFlags buffers,
 
     const int32_t srcRight = srcRect.left + srcRect.width;
     const int32_t srcTop = srcRect.bottom + srcRect.height;
-    const uint32_t srcLevel = srcTarget->getColor().level;
+    const uint32_t srcLevel = srcTarget->getColor(targetIndex).level;
 
     const int32_t dstRight = dstRect.left + dstRect.width;
     const int32_t dstTop = dstRect.bottom + dstRect.height;
-    const uint32_t dstLevel = dstTarget->getColor().level;
+    const uint32_t dstLevel = dstTarget->getColor(targetIndex).level;
 
     const VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -1188,11 +1190,11 @@ void VulkanDriver::blit(TargetBufferFlags buffers,
     }};
 
     auto vkblit = [=](VkCommandBuffer cmdbuffer) {
-        VkImage srcImage = srcTarget->getColor().image;
+        VkImage srcImage = srcTarget->getColor(targetIndex).image;
         VulkanTexture::transitionImageLayout(cmdbuffer, srcImage, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcLevel, 1, 1, aspect);
 
-        VkImage dstImage = dstTarget->getColor().image;
+        VkImage dstImage = dstTarget->getColor(targetIndex).image;
         VulkanTexture::transitionImageLayout(cmdbuffer, dstImage, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstLevel, 1, 1, aspect);
 
@@ -1203,10 +1205,12 @@ void VulkanDriver::blit(TargetBufferFlags buffers,
                 filter == SamplerMagFilter::NEAREST ? VK_FILTER_NEAREST : VK_FILTER_LINEAR);
 
         VulkanTexture::transitionImageLayout(cmdbuffer, srcImage, VK_IMAGE_LAYOUT_UNDEFINED,
-                getTextureLayout(srcTarget->getColor().texture->usage), srcLevel, 1, 1, aspect);
+                getTextureLayout(srcTarget->getColor(targetIndex).texture->usage), srcLevel, 1, 1,
+                aspect);
 
         VulkanTexture::transitionImageLayout(cmdbuffer, dstImage, VK_IMAGE_LAYOUT_UNDEFINED,
-                getTextureLayout(dstTarget->getColor().texture->usage), dstLevel, 1, 1, aspect);
+                getTextureLayout(dstTarget->getColor(targetIndex).texture->usage), dstLevel, 1, 1,
+                aspect);
     };
 
     if (!mContext.currentCommands) {

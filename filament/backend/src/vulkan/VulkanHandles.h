@@ -53,11 +53,11 @@ struct VulkanRenderTarget : private HwRenderTarget {
     void transformClientRectToPlatform(VkRect2D* bounds) const;
     void transformClientRectToPlatform(VkViewport* bounds) const;
     VkExtent2D getExtent() const;
-    VulkanAttachment getColor() const; // TODO: take an index
+    VulkanAttachment getColor(int target) const;
     VulkanAttachment getDepth() const;
     bool invalidate();
 private:
-    VulkanAttachment mColor = {}; // TODO: make into array
+    VulkanAttachment mColor[MRT::NUM_TARGETS] = {};
     VulkanAttachment mDepth = {};
     VulkanContext& mContext;
     bool mOffscreen;
