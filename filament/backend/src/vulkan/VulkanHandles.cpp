@@ -102,58 +102,63 @@ static VulkanAttachment createOffscreenAttachment(VulkanTexture* tex) {
 // Creates a special "default" render target (i.e. associated with the swap chain)
 // Note that the attachment structs are unused in this case in favor of VulkanSurfaceContext.
 VulkanRenderTarget::VulkanRenderTarget(VulkanContext& context) : HwRenderTarget(0, 0),
-        mContext(context), mOffscreen(false), mColorLevel(0), mDepthLevel(0) {}
+        mContext(context), mOffscreen(false) {}
 
 VulkanRenderTarget::VulkanRenderTarget(VulkanContext& context, uint32_t width, uint32_t height,
-        TargetBufferInfo colorInfo, VulkanTexture* color, TargetBufferInfo depthInfo,
-        VulkanTexture* depth) : HwRenderTarget(width, height), mContext(context), mOffscreen(true),
-        mColorLevel(colorInfo.level), mDepthLevel(depthInfo.level) {
-    mColor = color ? createOffscreenAttachment(color) : VulkanAttachment {};
-    mDepth = depth ? createOffscreenAttachment(depth) : VulkanAttachment {};
+            VulkanAttachment color[MRT::NUM_TARGETS], VulkanAttachment depthStencil[2]) :
+            HwRenderTarget(width, height), mContext(context), mOffscreen(true) {
+
+    mColor = color[0].texture ? createOffscreenAttachment(color[0].texture) : VulkanAttachment {};
+    mDepth = depthStencil[0].texture ? createOffscreenAttachment(depthStencil[0].texture) : VulkanAttachment {};
+
+    mColor.level = color[0].level;
+    mDepth.level = depthStencil[0].level;
 
     // We cannot use the VkImageView that's in the texture because we need to select a single level.
-    if (color) {
+    if (color[0].texture) {
         VkImageViewCreateInfo viewInfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = mColor.image,
             .format = mColor.format,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = colorInfo.level,
+                .baseMipLevel = mColor.level,
                 .levelCount = 1
             }
         };
-        if (color->target == SamplerType::SAMPLER_CUBEMAP) {
+        if (color[0].texture->target == SamplerType::SAMPLER_CUBEMAP) {
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
             viewInfo.subresourceRange.layerCount = 6;
-        } else if (color->target == SamplerType::SAMPLER_2D_ARRAY) {
+        } else if (color[0].texture->target == SamplerType::SAMPLER_2D_ARRAY) {
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
             viewInfo.subresourceRange.layerCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = colorInfo.layer;
+            viewInfo.subresourceRange.baseArrayLayer = color[0].layer;
         } else {
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             viewInfo.subresourceRange.layerCount = 1;
         }
         vkCreateImageView(context.device, &viewInfo, VKALLOC, &mColor.view);
     }
-    if (depth) {
+
+    VulkanTexture* depthTexture = depthStencil[0].texture;
+    if (depthTexture) {
         VkImageViewCreateInfo viewInfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = mDepth.image,
             .format = mDepth.format,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = depthInfo.level,
+                .baseMipLevel = depthStencil[0].level,
                 .levelCount = 1
             }
         };
-        if (depth->target == SamplerType::SAMPLER_CUBEMAP) {
+        if (depthTexture->target == SamplerType::SAMPLER_CUBEMAP) {
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
             viewInfo.subresourceRange.layerCount = 6;
-        } else if (depth->target == SamplerType::SAMPLER_2D_ARRAY) {
+        } else if (depthTexture->target == SamplerType::SAMPLER_2D_ARRAY) {
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
             viewInfo.subresourceRange.layerCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = depthInfo.layer;
+            viewInfo.subresourceRange.baseArrayLayer = depthStencil[0].layer;
         } else {
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             viewInfo.subresourceRange.layerCount = 1;

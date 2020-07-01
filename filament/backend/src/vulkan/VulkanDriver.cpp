@@ -443,10 +443,28 @@ void VulkanDriver::createDefaultRenderTargetR(Handle<HwRenderTarget> rth, int) {
 void VulkanDriver::createRenderTargetR(Handle<HwRenderTarget> rth,
         TargetBufferFlags targets, uint32_t width, uint32_t height, uint8_t samples,
         backend::MRT color, TargetBufferInfo depth, TargetBufferInfo stencil) {
-    auto colorTexture = color[0].handle ? handle_cast<VulkanTexture>(mHandleMap, color[0].handle) : nullptr;
-    auto depthTexture = depth.handle ? handle_cast<VulkanTexture>(mHandleMap, depth.handle) : nullptr;
+    VulkanAttachment colorTargets[MRT::NUM_TARGETS] = {};
+    for (int i = 0; i < MRT::NUM_TARGETS; i++) {
+        if (color[i].handle) {
+            colorTargets[i].texture = handle_cast<VulkanTexture>(mHandleMap, color[i].handle);
+        }
+        colorTargets[i].level = color[i].level;
+        colorTargets[i].layer = color[i].layer;
+    }
+
+    VulkanAttachment depthStencil[2] = {};
+    TextureHandle handle = depth.handle;
+    depthStencil[0].texture = handle ? handle_cast<VulkanTexture>(mHandleMap, handle) : nullptr;
+    depthStencil[0].level = depth.level;
+    depthStencil[0].layer = depth.layer;
+
+    handle = stencil.handle;
+    depthStencil[1].texture = handle ? handle_cast<VulkanTexture>(mHandleMap, handle) : nullptr;
+    depthStencil[1].level = stencil.level;
+    depthStencil[1].layer = stencil.layer;
+
     auto renderTarget = construct_handle<VulkanRenderTarget>(mHandleMap, rth, mContext,
-            width, height, color[0], colorTexture, depth, depthTexture);
+            width, height, colorTargets, depthStencil);
     mDisposer.createDisposable(renderTarget, [this, rth] () {
         destruct_handle<VulkanRenderTarget>(mHandleMap, rth);
     });
@@ -1154,11 +1172,11 @@ void VulkanDriver::blit(TargetBufferFlags buffers,
 
     const int32_t srcRight = srcRect.left + srcRect.width;
     const int32_t srcTop = srcRect.bottom + srcRect.height;
-    const uint32_t srcLevel = srcTarget->getColorLevel();
+    const uint32_t srcLevel = srcTarget->getColor().level;
 
     const int32_t dstRight = dstRect.left + dstRect.width;
     const int32_t dstTop = dstRect.bottom + dstRect.height;
-    const uint32_t dstLevel = dstTarget->getColorLevel();
+    const uint32_t dstLevel = dstTarget->getColor().level;
 
     const VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
